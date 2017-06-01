@@ -16,58 +16,68 @@ using namespace std;
 
 class GameOfLife : public Script {
 public:
-	int m;
+	IntVar matSize;
 	// Array representing the matrix.
 	BoolVarArray q;
 	// Matrix representing the board
-	GameOfLife(const SizeOptions& opt) : Script(opt), m(opt.size() + 4), q(*this, m * m, 0, 1) {
+	GameOfLife(const SizeOptions& opt) : Script(opt), matSize(*this, opt.size() + 4, opt.size() + 4), q(*this, matSize.val() * matSize.val(), 0, 1) {
 		const int n = q.size();
 		
-		Matrix<BoolVarArgs> mat(q, m, m);
+		Matrix<BoolVarArgs> mat(q, matSize.val(), matSize.val());
 
-		for (int i = 0; i < m; ++i) {
-			for (int j = 0; j < m; ++j) {
-				if(i < 2 || j < 2 || i > m - 3 || j > m - 3)
+		for (int i = 0; i < matSize.val(); ++i) {
+			for (int j = 0; j < matSize.val(); ++j) {
+				if(i < 2 || j < 2 || i > matSize.val() - 3 || j > matSize.val() - 3)
 				rel(*this, mat(i, j), IRT_EQ, 0);
 			}
 		}
 
-		for (int i = 2; i < m - 2; ++i) {
-			for (int j = 2; j < m - 2; ++j) {
-				//if(!mat(i, j).assigned())
-					//rel(*this, mat(i, j), IRT_EQ, 1);
-				if (mat(i, j).assigned() && mat(i, j).val() == 1)  {
-					rel(*this, mat(i - 1, j + 1) + mat(i, j + 1) + mat(i + 1, j + 1) + mat(i - 1, j - 1) + mat(i, j - 1) + mat(i + 1, j - 1) + mat(i - 1, j) + mat(i + 1, j) == 3);
-					//rel(*this, mat(i - 1, j + 1) + mat(i, j + 1) + mat(i + 1, j + 1) + mat(i - 1, j - 1) + mat(i, j - 1) + mat(i + 1, j - 1) + mat(i - 1, j) + mat(i + 1, j) <= 3);
-				} else if(mat(i, j).assigned() && mat(i, j).val() == 0) {
+		for (int j = 2; j < matSize.val() - 2; ++j) {
+			for (int i = 2; i < matSize.val() - 2; ++i) {
+				rel(*this, mat(i - 1, j + 1) + mat(i, j + 1) + mat(i + 1, j + 1) + mat(i - 1, j - 1) + mat(i, j - 1) + mat(i + 1, j - 1) + mat(i - 1, j) + mat(i + 1, j) >= 2);
+				rel(*this, mat(i - 1, j + 1) + mat(i, j + 1) + mat(i + 1, j + 1) + mat(i - 1, j - 1) + mat(i, j - 1) + mat(i + 1, j - 1) + mat(i - 1, j) + mat(i + 1, j) <= 3);
+				if (mat(i, j).assigned() && mat(i, j).val() == 0)
 					rel(*this, mat(i - 1, j + 1) + mat(i, j + 1) + mat(i + 1, j + 1) + mat(i - 1, j - 1) + mat(i, j - 1) + mat(i + 1, j - 1) + mat(i - 1, j) + mat(i + 1, j) != 3);
-				}
 			}
 		}
-
-		branch(*this, q, INT_VAR_SIZE_MIN(), INT_VAL_MED());
-		//print(cout);
+		print(cout);
+		branch(*this, q, INT_VAR_SIZE_MAX(), INT_VAL_MAX());
 	}
 
 	// Constructor for cloning \a s
 	GameOfLife(bool share, GameOfLife& s) : Script(share, s) {
 		q.update(*this, share, s.q);
+		matSize.update(*this, share, s.matSize);
 	}
 
 	// Perform copying during cloning
-	virtual Space*
-		copy(bool share) {
+	virtual Space* copy(bool share) {
 		return new GameOfLife(share, *this);
 	}
 
-	// Print solution
-	virtual void
-		print(std::ostream& os) const {
+	virtual void constrain(const Space& _b) {
+		const GameOfLife& b = static_cast<const GameOfLife&>(_b);
+		int currentLargest = 0;
+		for (int i = 0; i < b.q.size(); i++) {
+			currentLargest += b.q[i].val();
+		}
+		int smaller = 0;
+		for (int i = 0; i < b.q.size(); i++) {
+			smaller += q[i].val();
+		}
+		linear(*this, q, IRT_GR, currentLargest);
+	}
+
+	virtual void print(std::ostream& os) const {
 		os << "GameOfLife\n\t";
-		for (int i = 0; i < q.size(); i++) {
-			os << q[i] << ",";
-			if ((i + 1) % m == 0)
-				os << std::endl << "\t";
+		Matrix<BoolVarArgs> mat(q, matSize.val(), matSize.val());
+		for (int i = 2; i < matSize.val(); i++) {
+			for (int j = 2; j < matSize.val(); ++j) {
+				if (!(i < 2 || j < 2 || i > matSize.val() - 3 || j > matSize.val() - 3))
+					os << mat(i, j) << ",";
+				if (j == matSize.val() - 2)
+					os << std::endl << "\t";
+			}
 		}
 		os << std::endl;
 	}
@@ -88,7 +98,7 @@ int main(int argc, char* argv[]) {
 			break;
 		opt.size(number);
 		opt.parse(argc, argv);
-		Script::run<GameOfLife, DFS, SizeOptions>(opt);
+		Script::run<GameOfLife, BAB, SizeOptions>(opt);
 	}
 	return 0;
 }
